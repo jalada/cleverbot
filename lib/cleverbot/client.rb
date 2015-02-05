@@ -1,4 +1,4 @@
-require 'cleverbot/parser'
+require_relative './parser'
 
 module Cleverbot
   # Ruby wrapper for Cleverbot.com.
