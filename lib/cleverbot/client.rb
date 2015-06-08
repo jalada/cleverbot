@@ -1,4 +1,5 @@
 require_relative './parser'
+require 'uri'
 
 module Cleverbot
   # Ruby wrapper for Cleverbot.com.
@@ -40,7 +41,7 @@ module Cleverbot
     parser Parser
     headers ({
       'Accept-Encoding' => 'gzip',
-      'User-Agent' => 'Mozilla/5.0 (X11; Linux x86_64; rv:29.0) Gecko/20100101 Firefox/29.0',
+      'User-Agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.10; rv:38.0) Gecko/20100101 Firefox/38.0',
       'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       'Accept-Language' => 'fr-fr,fr;q=0.8,en-us;q=0.5,en;q=0.3',
       'X-Moz' => 'prefetch',
@@ -69,12 +70,21 @@ module Cleverbot
     #
     # [<tt>message</tt>] Optional <tt>String</tt> holding the message to be sent. Defaults to <tt>''</tt>.
     # [<tt>params</tt>] Optional <tt>Hash</tt> with form parameters. Merged with DEFAULT_PARAMS. Defaults to <tt>{}</tt>.
-    def self.write message='', params={}
+    def write_ message='', params={}
+      cookie_string = @cookies.map{|(k, v)| "#{k}=#{v}"}.join(";")
+
       body = DEFAULT_PARAMS.merge params
       body['stimulus'] = message
-      body['icognocheck'] = digest HashConversions.to_params(body)
+      body['icognocheck'] = self.class.digest HashConversions.to_params(body)
 
-      post(PATH, :body => body).parsed_response
+      response = self.class.post(PATH, :body => body, headers: {'Cookie' => cookie_string})
+
+      response.headers['set-cookie'].split(";").each do |cookie|
+        k, v = cookie.split("=")
+        @cookies[k] = v
+      end
+      
+      response.parsed_response
     end
 
     # Initializes a Client with given parameters.
@@ -84,6 +94,17 @@ module Cleverbot
     # [<tt>params</tt>] Optional <tt>Hash</tt> holding the initial parameters. Defaults to <tt>{}</tt>.
     def initialize params={}
       @params = params
+      @cookies = {}
+
+      get_cookie
+    end
+
+    def get_cookie
+      response = self.class.get("/")
+      response.headers['set-cookie'].split(";").each do |cookie|
+        k, v = cookie.split("=")
+        @cookies[k] = v
+      end
     end
 
     # Sends a message and returns a <tt>String</tt> with the message received. Updates #params to maintain state.
@@ -92,7 +113,7 @@ module Cleverbot
     #
     # [<tt>message</tt>] Optional <tt>String</tt> holding the message to be sent. Defaults to <tt>''</tt>.
     def write message=''
-      response = self.class.write message, @params
+      response = write_ message, @params
       message = response['message']
       response.keep_if { |key, value| DEFAULT_PARAMS.keys.include? key }
       @params.merge! response
